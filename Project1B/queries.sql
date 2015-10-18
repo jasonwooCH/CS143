@@ -8,7 +8,7 @@
 --		  	  M.id = MA.mid	);
 
 -- First Q answer
-SELECT first, last
+SELECT CONCAT_WS(' ', first, last)
 FROM Actor A, MovieActor MA, Movie M
 WHERE MA.mid = M.id AND title = 'Die Another Day' AND MA.aid = A.id;
 
