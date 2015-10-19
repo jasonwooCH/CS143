@@ -1,15 +1,15 @@
 <html>
 <body>
 
-<h1>Our 1B Web Query Interface</h1> <br>
+<h1>Brendan & Chul Hee's 1B Web Query Interface</h1>
 Type an SQL query in the following box: <br>
 
 <br>
 
 <form method="GET" action="<?php echo $_SERVER['PHP_SELF'];?>">
 		<TEXTAREA NAME="fquery" ROWS=8 COLS=60>
-			SELECT * FROM Actor WHERE id=10;
-		</TEXTAREA>
+			SELECT * FROM Actor WHERE id < 100;
+		</TEXTAREA> <br>
 		<input type="submit">
 </form>
 
@@ -22,9 +22,7 @@ Type an SQL query in the following box: <br>
 	$db_connection = mysql_connect("localhost", "cs143", "");
 	mysql_select_db("CS143", $db_connection);
 
-	$sanitized_query = mysql_real_escape_string($squery, $db_connection);
-
-	$result = mysql_query($sanitized_query, $db_connection);
+	$result = mysql_query($squery,$db_connection);
 
 	if (!$result)
 	{
@@ -32,18 +30,39 @@ Type an SQL query in the following box: <br>
 		exit;
 	}
 
-	// mysql_num_fields(); - number of attributes in a query
-
-	while($row = mysql_fetch_row($result)) 
+	if (is_resource($result))
 	{
-		$id = $row[0];
-	    $last = $row[1];
-	    $first = $row[2];
-	    $sex = $row[3];
-	    $dob = $row[4];
-	    $dod = $row[5];
-	    print "$id, $last, $first, $sex, $dob, $dod<br />";
+
+		echo "<table border='1'>";
+
+	    $row = mysql_fetch_object($result);
+	    echo "<tr>";
+	    foreach($row as $cname => $cvalue) {
+				//if (empty($cvalue)) $cvalue = 'N/A';
+			print "<td><b>".$cname."</b></td>";
+		}
+		echo "</tr>";
+		
+		echo "<tr>";
+		foreach($row as $cname => $cvalue) {
+			if (empty($cvalue)) $cvalue = 'N/A';
+			print "<td>".$cvalue."</td>";
+		}
+		echo "</tr>";
+
+		while($row = mysql_fetch_object($result)) 
+		{
+			echo "<tr>";
+			foreach($row as $cname => $cvalue) {
+				if (empty($cvalue)) $cvalue = 'N/A';
+				print "<td>".$cvalue."</td>";
+			}
+			echo "</tr>";   
+		}
+		echo "</table";
 	}
+
+
 
 	mysql_close($db_connection);
 
