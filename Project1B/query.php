@@ -1,15 +1,14 @@
 <html>
 <body>
 
-<h1>Brendan & Chul Hee's 1B Web Query Interface</h1>
+<h1>Brendan and Chul Hee's Web Query Interface</h1>
 Type an SQL query in the following box: <br>
-
+(Example is given as a default)
+<br>
 <br>
 
 <form method="GET" action="<?php echo $_SERVER['PHP_SELF'];?>">
-		<TEXTAREA NAME="fquery" ROWS=8 COLS=60>
-			SELECT * FROM Actor WHERE id < 100;
-		</TEXTAREA> <br>
+		<TEXTAREA NAME="fquery" ROWS=8 COLS=60>SELECT * FROM Actor WHERE id < 100;</TEXTAREA> <br>
 		<input type="submit">
 </form>
 
@@ -22,7 +21,10 @@ Type an SQL query in the following box: <br>
 	$db_connection = mysql_connect("localhost", "cs143", "");
 	mysql_select_db("CS143", $db_connection);
 
-	$result = mysql_query($squery,$db_connection);
+	$sanitized = ($squery);
+	$result = mysql_query($sanitized, $db_connection);
+
+	//$result = mysql_query($squery,$db_connection);
 
 	if (!$result)
 	{
@@ -30,7 +32,7 @@ Type an SQL query in the following box: <br>
 		exit;
 	}
 
-	if (is_resource($result))
+	if (is_resource($result)) // SELECT Query
 	{
 
 		echo "<table border='1'>";
@@ -61,8 +63,6 @@ Type an SQL query in the following box: <br>
 		}
 		echo "</table";
 	}
-
-
 
 	mysql_close($db_connection);
 
