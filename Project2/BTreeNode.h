@@ -12,6 +12,8 @@
 
 #include "RecordFile.h"
 #include "PageFile.h"
+#include <stdio.h>
+#include <cstring>
 
 typedef struct {
     int ent_key;

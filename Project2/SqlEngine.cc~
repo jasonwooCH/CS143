@@ -146,7 +146,7 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
   }
 
   fstream loaded_file;
-  loaded_file.open (loadfile.c_str(), fstream::in);
+  loaded_file.open (loadfile, fstream::in);
 
   if (!loaded_file) {
     fprintf(stderr, "Error opening file");
