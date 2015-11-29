@@ -35,6 +35,11 @@ class BTreeIndex {
  public:
   BTreeIndex();
 
+  // Our functions to read & write the first page in pf, where we stored height & root
+  // to be stored in memory.
+  RC readInfo();
+  RC writeInfo();
+
   /**
    * Open the index file in read or write mode.
    * Under 'w' mode, the index file should be created if it does not exist.
@@ -57,6 +62,8 @@ class BTreeIndex {
    * @return error code. 0 if no error
    */
   RC insert(int key, const RecordId& rid);
+  RC recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
+                   int currheight, PageId& leftChild, PageId& rightChild);
 
   /**
    * Run the standard B+Tree key search algorithm and identify the
@@ -97,6 +104,8 @@ class BTreeIndex {
   /// this class is destructed. Make sure to store the values of the two 
   /// variables in disk, so that they can be reconstructed when the index
   /// is opened again later.
+
+  char buffer[PageFile::PAGE_SIZE];
 };
 
 #endif /* BTREEINDEX_H */

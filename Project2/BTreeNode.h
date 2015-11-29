@@ -28,6 +28,10 @@ typedef struct {
  */
 class BTLeafNode {
   public:
+    static const int entry_size = sizeof(leaf_entry);
+    static const int max_key_count = (PageFile::PAGE_SIZE - sizeof(int) - sizeof(PageId)) / entry_size - 1;
+    static const int nonEntry_size = sizeof(entry_node);
+
    /**
     * Insert the (key, rid) pair to the node.
     * Remember that all keys inside a B+tree node should be kept sorted.
@@ -127,6 +131,10 @@ class BTLeafNode {
  */
 class BTNonLeafNode {
   public:
+    static const int entry_size = sizeof(leaf_entry);
+    static const int max_key_count = (PageFile::PAGE_SIZE - sizeof(int) - sizeof(PageId)) / entry_size - 1;
+    static const int nonEntry_size = sizeof(entry_node);
+
    /**
     * Insert a (key, pid) pair to the node.
     * Remember that all keys inside a B+tree node should be kept sorted.

@@ -14,11 +14,8 @@ last 4B for PageId of sibling
 (1024 - 4 - 4) / entry_size = number of entries in a page
 entry = RecordID & int = 12B
 number of entries = floor 1016/12 = 84
+one for overflow insert --> 83
 */
-
-static int entry_size = sizeof(leaf_entry);
-static int max_key_count = (PageFile::PAGE_SIZE - sizeof(int) - sizeof(PageId)) / entry_size;
-static int nonEntry_size = sizeof(entry_node);
 
 /*
  * Read the content of the node from the page pid in the PageFile pf.
@@ -64,7 +61,7 @@ RC BTLeafNode::insert(int key, const RecordId& rid)
 { 
 	int key_count = getKeyCount();
 
-	if (key_count >= max_key_count)
+	if (key_count >= max_key_count + 1) // + 1 for one overflow insert
 		return RC_NODE_FULL;
 
 	leaf_entry* key_start = (leaf_entry *) (buffer + sizeof(int));
