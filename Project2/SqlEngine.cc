@@ -155,6 +155,15 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
 
 
   BTreeIndex treeIndex;
+  if (index)
+  {
+    if (treeIndex.open(table + ".idx", 'w') < 0) {
+      fprintf(stderr, "Error with creating/opening index %s \n", table.c_str());
+      return rc;
+    }
+
+    treeIndex.readInfo();
+  }
 
   string fileline;
   int key;

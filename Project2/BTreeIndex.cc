@@ -91,11 +91,16 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             rightChild = sibPid;
         }
         return 0;
-    } else {
+    } 
+
+    else {
         // Find the proper pointer to child
         BTNonLeafNode newNonleaf;
         newNonleaf.read(pid, pf);
         newNonleaf.locateChildPtr(key, pid);
+
+        currheight++;
+
         recInsert(key, rid, pid, midKey, currheight, leftChild, rightChild);
         // Check if insert causes overflow in a child node
         if (midKey == 0) {
@@ -127,14 +132,16 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
  */
 RC BTreeIndex::insert(int key, const RecordId& rid)
 {
-	if (rootPid == -1) {
+	if (rootPid < 1) {
 
 		rootPid = pf.endPid();
         BTLeafNode newRoot;
         newRoot.write(pf.endPid(), pf);
         newRoot.insert(key, rid);
-        treeHeight++;
-    } else {
+        //treeHeight++;
+    } 
+
+    else {
         int currheight = 0;
         PageId leftChild = -1;
         PageId rightChild = -1;
@@ -147,10 +154,13 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
         if (midKey != 0) {
             BTNonLeafNode newNonRoot;
             rootPid = pf.endPid();
-            newNonRoot.write(rootPid, pf);
+            
             newNonRoot.initializeRoot(leftChild, midKey, rightChild);
+            newNonRoot.write(rootPid, pf);
             treeHeight++;
         }
+
+        //treeHeight++;
     }
 
     return 0;
