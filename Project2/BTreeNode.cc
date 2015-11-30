@@ -268,7 +268,7 @@ RC BTNonLeafNode::insert(int key, PageId pid)
 { 
 	int key_count = getKeyCount();
 
-	if (key_count >= max_key_count)
+	if (key_count >= max_key_count + 1)
 		return RC_NODE_FULL;
 
 	entry_node* key_start = (entry_node *) (buffer + sizeof(int) + sizeof(PageId));
@@ -319,16 +319,16 @@ RC BTNonLeafNode::insertAndSplit(int key, PageId pid, BTNonLeafNode& sibling, in
 	int key_count = getKeyCount();
 
 	int front_half = (key_count) / 2;
-	int back_half = (key_count +1)/ 2;
+	int back_half = (key_count)/ 2 - 1;
 
 	entry_node* key_start = (entry_node*) (buffer + sizeof(int) + sizeof(PageId));
 	entry_node* split_point = key_start + front_half;
 
 	entry_node* sib_key_start = (entry_node*) (sibling.buffer + sizeof(int) + sizeof(PageId));
 	midKey = split_point->ent_key;
-	back_half--;
+	
 	// copy backhalf into siblings buffer
-	memcpy(sib_key_start, split_point + 1, sizeof(entry_node) * back_half );
+	memcpy(sib_key_start, ++split_point, sizeof(entry_node) * back_half );
 	memcpy(sibling.buffer, &back_half, sizeof(int)); // update key_count in sibling buffer
 	memcpy(buffer, &front_half, sizeof(int));
 
@@ -348,25 +348,40 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
 	int key_count = getKeyCount();
 
 	entry_node * key_start = (entry_node*) (buffer + sizeof(int) + sizeof(PageId));
+	PageId* firstptr = (PageId *) (buffer + sizeof(int));
+
+	if (key_start->ent_key >= searchKey) {
+		pid = *firstptr;
+		return 0;
+	}
+
+	key_start++;
 
 	int i;
-	for (i = 0; i < key_count; i++){
+	for (i = 1; i < key_count; i++){
 		if (key_start->ent_key == searchKey)
 		{
-			pid = i;
+			pid = key_start->pag_id;
 			return 0;
 		}
 
-		if (key_start->ent_key > searchKey)
+		if (key_start->ent_key < searchKey)
 		{
-			if (i == 0)
-				return RC_NO_SUCH_RECORD;
-			pid = i - 1;
+			if (i == key_count - 1)
+			{
+				pid = key_start->pag_id;
 				return 0;
+			}
 		}
+		if ((key_start+1)->ent_key > searchKey)
+		{
+			pid = key_start->pag_id;
+		}
+
 
    		key_start++;
    	}
+
    	pid = key_count;
    	return 0;
  }

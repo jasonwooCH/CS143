@@ -74,18 +74,28 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
         if(newleaf.read(pid, pf) < 0)
         	return RC_FILE_READ_FAILED;
 
+
         // Check if the insert will cause overflow
-        if (newleaf.getKeyCount() < BTLeafNode::max_key_count) {
-            newleaf.insert(key, rid);
+        if (newleaf.getKeyCount() < BTLeafNode::max_key_count) 
+        {
+            if (newleaf.insert(key, rid) < 0)
+                fprintf(stdout, "leaf insert error %d\n", pid);
             newleaf.write(pid, pf);
-        } else {
+            midKey = 0;
+        } 
+        else 
+        {
             BTLeafNode sibling;
-            newleaf.insertAndSplit(key, rid, sibling, midKey);
+            if (newleaf.insertAndSplit(key, rid, sibling, midKey) < 0)
+                fprintf(stdout, "leaf split error %d\n", pid);
 
             PageId sibPid = pf.endPid();
             sibling.write(sibPid, pf);
 
             newleaf.setNextNodePtr(sibPid);
+            newleaf.write(pid, pf);
+
+            fprintf(stdout, "Leaf splitting %d\n", pid);
 
             leftChild = pid;
             rightChild = sibPid;
@@ -95,6 +105,7 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
 
     else {
         // Find the proper pointer to child
+        //fprintf(stderr, "DO WE EVEN GET HERE? %d\n", treeHeight);
         BTNonLeafNode newNonleaf;
         newNonleaf.read(pid, pf);
         newNonleaf.locateChildPtr(key, pid);
@@ -106,15 +117,27 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
         if (midKey == 0) {
             return 0;
         }
-        if (newNonleaf.getKeyCount() < BTLeafNode::max_key_count) {
-            newNonleaf.insert(midKey, rightChild);
+        if (newNonleaf.getKeyCount() < BTLeafNode::max_key_count) 
+        {
+            if (newNonleaf.insert(midKey, rightChild) < 0)
+                fprintf(stdout, "Nonleaf insert error %d\n", pid);
+
+            newNonleaf.write(pid, pf);
+            //fprintf(stdout, "Nonleaf splitting %d\n", pid);
             midKey = 0;
-        } else {
+        } 
+        else 
+        {
             BTNonLeafNode sib;
             PageId sibPid = pf.endPid();
             
-            newNonleaf.insertAndSplit(key, rightChild, sib, midKey);
+            if (newNonleaf.insertAndSplit(key, rightChild, sib, midKey) < 0)
+                fprintf(stdout, "nonleaf split error %d\n", midKey);
+
+            fprintf(stdout, "THIS SHOULDNT BE CALLED WITH MOVIE TABLE %d\n", sibPid);
+
             sib.write(sibPid, pf);
+            newNonleaf.write(pid, pf);
 
             leftChild = pid;
             rightChild = sibPid;
@@ -133,12 +156,15 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
 RC BTreeIndex::insert(int key, const RecordId& rid)
 {
 	if (rootPid < 1) {
-
-		rootPid = pf.endPid();
+        rootPid = 1;
+		//rootPid = pf.endPid();
+        fprintf(stdout, "INITIAL ROOT PID %d\n", rootPid);
         BTLeafNode newRoot;
-        newRoot.write(pf.endPid(), pf);
-        newRoot.insert(key, rid);
-        //treeHeight++;
+        
+        if (newRoot.insert(key, rid) < 0)
+            fprintf(stdout, "root error %d\n", rootPid);
+        newRoot.write(1, pf);
+        treeHeight = 0;
     } 
 
     else {
@@ -155,14 +181,18 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
             BTNonLeafNode newNonRoot;
             rootPid = pf.endPid();
             
-            newNonRoot.initializeRoot(leftChild, midKey, rightChild);
+            if (newNonRoot.initializeRoot(leftChild, midKey, rightChild) < 0)
+                fprintf(stdout, "initialize Root error %d\n", midKey);
             newNonRoot.write(rootPid, pf);
             treeHeight++;
+            fprintf(stdout, "INCREMENTED TREE HEIGHT TO: %d, ROOT: %d\n", treeHeight, rootPid);
         }
 
         //treeHeight++;
     }
 
+    writeInfo();
+    //treeHeight++;
     return 0;
 
 /*
@@ -180,7 +210,7 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
 	this->locate(key, pointer);
 	newLeaf.read(pointer.Pid, pf);
 
-		if (newLeaf.getkeyCount() < 84){
+		if (newLeaf.getKeyCount() < 84){
 			newLeaf.insert(key, rid);
 			newLeaf.write(pointer.Pid, pf);
 		} else {
@@ -232,11 +262,16 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
 	{
 		BTNonLeafNode nonLeaf;
 		if (nonLeaf.read(cursor.pid, pf) < 0)
+        {
 			return RC_FILE_READ_FAILED;
+        }
 
 		RC childPtr = nonLeaf.locateChildPtr(searchKey, cursor.pid);
 		if (childPtr < 0)
-			return RC_NO_SUCH_RECORD;
+        {
+            fprintf(stderr, "HERE IS THE 1HEIGHT %d and PID %d and KEY %d \n", treeHeight, cursor.pid, searchKey);
+			return childPtr;
+        }
 
 		currHeight++;
 	}
@@ -244,13 +279,28 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
 	BTLeafNode leafNode;
 
 	if (leafNode.read(cursor.pid, pf) < 0)
+    {
+        fprintf(stderr, "HERE IS THE 2HEIGHT %d and PID %d and KEY %d \n", treeHeight, cursor.pid, searchKey);
 		return RC_FILE_READ_FAILED;
+    }
 
-	if (leafNode.locate(searchKey, cursor.eid))
+	if (leafNode.locate(searchKey, cursor.eid) < 0)
+    {
+        fprintf(stderr, "HERE IS THE 3HEIGHT %d and PID %d and EID %d \n", treeHeight, cursor.pid, cursor.eid);
 		return RC_NO_SUCH_RECORD;
+    }
 
 
     return 0;
+}
+
+RC BTreeIndex::readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& cursor)
+{
+    BTLeafNode leafNode;
+    if (leafNode.read(cursor.pid, pf) < 0)
+      return RC_FILE_READ_FAILED;
+
+    return leafNode.readEntry(cursor.eid, key, rid);
 }
 
 /*

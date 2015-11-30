@@ -85,6 +85,8 @@ class BTreeIndex {
    */
   RC locate(int searchKey, IndexCursor& cursor);
 
+  RC readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& cursor);
+
   /**
    * Read the (key, rid) pair at the location specified by the index cursor,
    * and move foward the cursor to the next entry.
