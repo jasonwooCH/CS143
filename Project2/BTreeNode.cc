@@ -88,6 +88,9 @@ RC BTLeafNode::insert(int key, const RecordId& rid)
 
 	*key_start = new_entry;
 
+	if (key_start->ent_key == 272)
+		fprintf(stdout, "INSERTED WITH KEY: %d R.PID: %d\n", key_start->ent_key, key_start->rec_id.pid);
+
 	key_count++; // after insert succeed, should increment;
 	memcpy(buffer,&key_count, sizeof(int)); // update
 
@@ -115,10 +118,15 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 	int front_half = (key_count + 1) / 2;
 	int back_half = key_count / 2;
 
-	char* key_start = buffer + sizeof(int);
-	char* split_point = key_start + sizeof(leaf_entry) * front_half;
+	//char* key_start = buffer + sizeof(int);
+	//char* split_point = key_start + sizeof(leaf_entry) * front_half;
 
-	char* sib_key_start = sibling.buffer + sizeof(int);
+	//char* sib_key_start = sibling.buffer + sizeof(int);
+
+	leaf_entry* key_start = (leaf_entry *) (buffer + sizeof(int));
+	leaf_entry* split_point = key_start + front_half;
+
+	leaf_entry* sib_key_start = (leaf_entry *) (sibling.buffer + sizeof(int));
 
 	// copy backhalf into siblings buffer
 	memcpy(sib_key_start, split_point, sizeof(leaf_entry) * back_half);
@@ -127,6 +135,8 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 	memcpy(buffer, &front_half, sizeof(int));
 
 	memset(split_point, '\0', sizeof(leaf_entry) * back_half); // clear out the back half of the buffer
+
+	fprintf(stdout, "SIBLING's 1st Key: %d R.PID: %d\n", sib_key_start->ent_key, sib_key_start->rec_id.pid);
 
 	return 0; 
 }
@@ -155,12 +165,15 @@ RC BTLeafNode::locate(int searchKey, int& eid)
 		if (key_start->ent_key == searchKey)
 		{
 			eid = i;
+			fprintf(stdout, "searchKey FOUND: %d\n", key_start->ent_key);
+			fprintf(stdout, "ITS R.PID: %d\n", key_start->rec_id.pid);
 			return 0;
 		}
 
 		if (key_start->ent_key > searchKey)
 		{
 			eid = i;
+			fprintf(stdout, "searchKey NOT FOUND: %d\n", key_start->ent_key);
 			return RC_NO_SUCH_RECORD;
 		}
 
@@ -169,6 +182,7 @@ RC BTLeafNode::locate(int searchKey, int& eid)
 
 	// if out of loop, iterated all entries & no match found
 	eid = i;
+	fprintf(stdout, "searchKey NOT FOUND: %d\n", key_start->ent_key);
 	return RC_NO_SUCH_RECORD;
 }
 
@@ -191,9 +205,13 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 		return RC_NO_SUCH_RECORD;
 	}
 
-	leaf_entry read_entry = *(key_start + eid);
-	key = read_entry.ent_key;
-	rid = read_entry.rec_id;
+	//leaf_entry read_entry = *(key_start + eid);
+	leaf_entry* read_entry = key_start + eid;
+
+	key = read_entry->ent_key;
+	rid = read_entry->rec_id;
+
+	fprintf(stdout, "READ IN ENTRY R.PID: %d\n", rid.pid);
 
 	return 0;
 }

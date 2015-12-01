@@ -104,10 +104,11 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
   }
 
   // open the table file
-  if ((rc = rf.open(table + ".tbl", 'r')) < 0) {
-    fprintf(stderr, "Error: table %s does not exist\n", table.c_str());
-    return rc;
-  }
+  if (needRead) // open table only if we need to read values from it
+    if ((rc = rf.open(table + ".tbl", 'r')) < 0) {
+      fprintf(stderr, "Error: table %s does not exist\n", table.c_str());
+      return rc;
+    }
 
   /*  *  *  *  *  *  *  *  *  *  *  *
     REGULAR SEARCH OF INDEX SEARCH
@@ -184,7 +185,7 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
       ++rid;
     }
   }
-  // ELSE INDEX FILE EXISTS && RANGE/EQAULITY QUERY
+  // ELSE INDEX FILE EXISTS && RANGE/EQAULITY QUERY = DO INDEX SEARCH
   else
   {
     count = 0;
@@ -197,13 +198,22 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
 
     if (eql != -1) 
     {
+      if (min > eql || max < eql)
+        goto no_match;
+
       if ((rc = treeIndex.locate(eql, cursor)) < 0) {
         fprintf(stderr, "HERE IS THE ERROR %d\n", rc);
         goto exit_select;
       }
 
       if (needRead) {
-        goto exit_select;
+        treeIndex.readLeafEntry(cursor.eid, key, rid, cursor);
+        fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d R.PID: %d\n", cursor.eid, cursor.pid, rid.pid);
+
+        rc = rf.read(rid, key, value);
+
+
+        fprintf(stdout, "%s\n", value.c_str());
       }
       else {
         count++;
@@ -235,6 +245,7 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
 
 
   // print matching tuple count if "select count(*)"
+  no_match:
   if (attr == 4) {
     fprintf(stdout, "%d\n", count);
   }
@@ -295,6 +306,8 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
       fprintf(stderr, "Error appending a tuple\n");
       return -1;
     }
+
+    //fprintf(stdout, "R.PID: %d\n", rid.pid);
 
     if (index)
     {
