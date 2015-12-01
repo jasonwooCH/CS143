@@ -66,7 +66,7 @@ RC BTreeIndex::close()
 }
 
 RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
-                   int currheight, PageId& leftChild, PageId& rightChild)
+                   int& currheight, PageId& leftChild, PageId& rightChild)
 {
     // Check if the node is a leafNode
     if (treeHeight == currheight) {
@@ -95,7 +95,7 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             newleaf.setNextNodePtr(sibPid);
             newleaf.write(pid, pf);
 
-            fprintf(stdout, "Leaf splitting %d\n", pid);
+            fprintf(stdout, "Leaf splitting at pid: %d with sib: %d\n", pid, sibPid);
 
             leftChild = pid;
             rightChild = sibPid;
@@ -105,14 +105,17 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
 
     else {
         // Find the proper pointer to child
-        //fprintf(stderr, "DO WE EVEN GET HERE? %d\n", treeHeight);
+
         BTNonLeafNode newNonleaf;
         newNonleaf.read(pid, pf);
-        newNonleaf.locateChildPtr(key, pid);
+
+        PageId newpid = pid;
+
+        newNonleaf.locateChildPtr(key, newpid);
 
         currheight++;
 
-        recInsert(key, rid, pid, midKey, currheight, leftChild, rightChild);
+        recInsert(key, rid, newpid, midKey, currheight, leftChild, rightChild);
         // Check if insert causes overflow in a child node
         if (midKey == 0) {
             return 0;
@@ -122,8 +125,8 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             if (newNonleaf.insert(midKey, rightChild) < 0)
                 fprintf(stdout, "Nonleaf insert error %d\n", pid);
 
+            fprintf(stdout, "INSERTING TO ROOT NODE: %d\n", pid) ;
             newNonleaf.write(pid, pf);
-            //fprintf(stdout, "Nonleaf splitting %d\n", pid);
             midKey = 0;
         } 
         else 
@@ -186,6 +189,7 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
             newNonRoot.write(rootPid, pf);
             treeHeight++;
             fprintf(stdout, "INCREMENTED TREE HEIGHT TO: %d, ROOT: %d\n", treeHeight, rootPid);
+            fprintf(stdout, "LEFT CHILD: %d, RIGHT CHILD: %d\n", leftChild, rightChild);
         }
 
         //treeHeight++;

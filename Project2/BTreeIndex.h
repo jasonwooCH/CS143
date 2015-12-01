@@ -63,7 +63,7 @@ class BTreeIndex {
    */
   RC insert(int key, const RecordId& rid);
   RC recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
-                   int currheight, PageId& leftChild, PageId& rightChild);
+                   int& currheight, PageId& leftChild, PageId& rightChild);
 
   /**
    * Run the standard B+Tree key search algorithm and identify the
@@ -96,6 +96,10 @@ class BTreeIndex {
    * @return error code. 0 if no error
    */
   RC readForward(IndexCursor& cursor, int& key, RecordId& rid);
+
+  RC getHeight() {
+    return treeHeight;
+  }
   
  private:
   PageFile pf;         /// the PageFile used to store the actual b+tree in disk

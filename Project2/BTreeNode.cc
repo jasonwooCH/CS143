@@ -186,7 +186,10 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 	leaf_entry* key_start = (leaf_entry*) (buffer + sizeof(int));
 
 	if (eid >= key_count)
+	{
+		fprintf(stderr, "NO ENTRY %d\n", eid);
 		return RC_NO_SUCH_RECORD;
+	}
 
 	leaf_entry read_entry = *(key_start + eid);
 	key = read_entry.ent_key;
@@ -350,25 +353,30 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
 	entry_node * key_start = (entry_node*) (buffer + sizeof(int) + sizeof(PageId));
 	PageId* firstptr = (PageId *) (buffer + sizeof(int));
 
+	int j = 0;
+
 	if (key_start->ent_key >= searchKey) {
 		pid = *firstptr;
 		return 0;
 	}
 
-	key_start++;
+	//key_start++; j++;
+	//fprintf(stdout, "Key Count at Root: %d\n", key_count);
 
 	int i;
-	for (i = 1; i < key_count; i++){
+	for (i = 0; i < key_count; i++){
 		if (key_start->ent_key == searchKey)
 		{
 			pid = key_start->pag_id;
+			//fprintf(stdout, "locating child ptr %d\n", pid);
 			return 0;
 		}
 
 		if (key_start->ent_key < searchKey)
 		{
-			if (i == key_count - 1)
+			if (i == key_count-1)
 			{
+				//fprintf(stdout, "locating child ptr %d\n", pid);
 				pid = key_start->pag_id;
 				return 0;
 			}
@@ -376,14 +384,18 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
 		if ((key_start+1)->ent_key > searchKey)
 		{
 			pid = key_start->pag_id;
+			//fprintf(stdout, "locating child ptr %d\n", pid);
+			return 0;
 		}
 
 
-   		key_start++;
+   		key_start++; j++;
    	}
 
-   	pid = key_count;
-   	return 0;
+   	fprintf(stdout, "locateChildPtr Fail %d pid: %d\n", searchKey, pid);
+   	fprintf(stderr, "found pid: %d with key: %d\n", (key_start-1)->pag_id, (key_start-1)->ent_key);
+   	fprintf(stderr, "iterated %d times in keycount: %d\n", j, key_count);
+   	return RC_NO_SUCH_RECORD;
  }
 
 /*

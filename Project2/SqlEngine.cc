@@ -54,9 +54,13 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
   int max = INT_MAX;
   int eql = -1;
   int neql = -1;
+  int needRead = 0;
 
   int newMax = max;
   int newMin = min;
+
+  if (attr == 2 || attr == 3)
+    needRead = 1;
 
   /*  *  *  *  *  *  *  *  *  *  *  *  *  *
     CHECK IF RANGE/EQUALTY ON KEY EXISTS
@@ -95,6 +99,8 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
           break; 
       }
     }
+    else if (cond[i].attr == 2)
+      needRead = 1;
   }
 
   // open the table file
@@ -181,7 +187,12 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
   // ELSE INDEX FILE EXISTS && RANGE/EQAULITY QUERY
   else
   {
+    count = 0;
+
     treeIndex.readInfo();
+
+    fprintf(stderr, "HERE IS THE TREE HEIGHT: %d\n", treeIndex.getHeight());
+
     IndexCursor cursor;
 
     if (eql != -1) 
@@ -191,11 +202,21 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
         goto exit_select;
       }
 
+      if (needRead) {
+        goto exit_select;
+      }
+      else {
+        count++;
+        fprintf(stdout, "%d\n", eql);
+      }
+
+      /*
       for (unsigned i = 0; i < cond.size(); i++) 
       {
         if (cond[i].attr == 2)
         {
           treeIndex.readLeafEntry(cursor.eid, key, rid, cursor);
+          fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d RID: %d\n", cursor.eid, cursor.pid, rid.pid);
 
           if ((rc = rf.read(rid, key, value)) < 0) {
             fprintf(stderr, "Error: while reading a tuple from table %s\n", table.c_str());
@@ -207,8 +228,8 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
           if (checkAndPrint(cond[i].comp, diff, attr, count, key, value) < 0)
             fprintf(stderr, "HERE IS THE ERROR in C&P");
         }
-
       }
+      */
     }
   }
 
@@ -282,6 +303,8 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
     }
 
   }
+
+  fprintf(stdout, "FINAL TREE HEIGHT: %d\n", treeIndex.getHeight());
 
   loaded_file.close();
 
