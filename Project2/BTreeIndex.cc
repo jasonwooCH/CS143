@@ -125,7 +125,7 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             if (newNonleaf.insert(midKey, rightChild) < 0)
                 fprintf(stdout, "Nonleaf insert error %d\n", pid);
 
-            //fprintf(stdout, "INSERTING TO ROOT NODE: %d\n", pid) ;
+            //fprintf(stdout, "INSERTING TO ROOT NODE a NEW KEY: %d\n", midKey);
             newNonleaf.write(pid, pf);
             midKey = 0;
         } 
@@ -165,7 +165,10 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
         BTLeafNode newRoot;
         
         if (newRoot.insert(key, rid) < 0)
-            fprintf(stdout, "root error %d\n", rootPid);
+            fprintf(stderr, "root error %d\n", rootPid);
+        
+        fprintf(stdout, "FIRST ADDED KEY: %d R.PID: %d\n", key, rid.pid);
+        
         newRoot.write(1, pf);
         treeHeight = 0;
     } 
@@ -269,6 +272,7 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
         {
 			return RC_FILE_READ_FAILED;
         }
+        fprintf(stdout, "READING@TI.locate Nonleaf\n");
 
 		RC childPtr = nonLeaf.locateChildPtr(searchKey, cursor.pid);
 		if (childPtr < 0)
@@ -280,32 +284,34 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
 		currHeight++;
 	}
 
-	BTLeafNode leafNode;
+	//BTLeafNode leafNode;
 
-	if (leafNode.read(cursor.pid, pf) < 0)
+	if (cacheLeaf.read(cursor.pid, pf) < 0)
     {
         fprintf(stderr, "HERE IS THE 2HEIGHT %d and PID %d and KEY %d \n", treeHeight, cursor.pid, searchKey);
 		return RC_FILE_READ_FAILED;
     }
+    fprintf(stdout, "READING@TI.locate Leaf\n");
 
-	if (leafNode.locate(searchKey, cursor.eid) < 0)
-    {
-        fprintf(stderr, "HERE IS THE 3HEIGHT %d and PID %d and EID %d \n", treeHeight, cursor.pid, cursor.eid);
-		return RC_NO_SUCH_RECORD;
-    }
+
+	cacheLeaf.locate(searchKey, cursor.eid);
 
 
     return 0;
 }
+
+//RC BTreeIndex::getCacheLeaf();
 
 RC BTreeIndex::readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& cursor)
 {
     BTLeafNode leafNode;
     if (leafNode.read(cursor.pid, pf) < 0)
       return RC_FILE_READ_FAILED;
+    fprintf(stdout, "READING@TI.rLE\n");
+
 
     leafNode.readEntry(cursor.eid, key, rid);
-    fprintf(stdout, "R.PID @ readLeafEntry: %d\n", rid.pid);
+    //fprintf(stdout, "R.PID @ readLeafEntry: %d\n", rid.pid);
 
     return 0;
 }
@@ -320,12 +326,14 @@ RC BTreeIndex::readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& curs
  */
 RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid)
 {
-	BTLeafNode readNode;
+	//BTLeafNode readNode;
 
-	if (readNode.read(cursor.pid, pf) < 0)
-		return RC_FILE_READ_FAILED;
+	//if (cacheLeaf.read(cursor.pid, pf) < 0)
+	//	return RC_FILE_READ_FAILED;
+    if (cursor.eid >= cacheLeaf.getKeyCount())
+        return RC_NO_SUCH_RECORD;
 
-	if (readNode.readEntry(cursor.eid, key, rid) < 0)
+	if (cacheLeaf.readEntry(cursor.eid, key, rid) < 0)
 		return RC_NO_SUCH_RECORD;
 
 	cursor.eid++;

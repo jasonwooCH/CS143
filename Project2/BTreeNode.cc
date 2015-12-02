@@ -25,6 +25,7 @@ one for overflow insert --> 83
  */
 RC BTLeafNode::read(PageId pid, const PageFile& pf)
 {
+	currPid = pid;
 	return pf.read(pid, buffer);
 }
     
@@ -61,7 +62,7 @@ RC BTLeafNode::insert(int key, const RecordId& rid)
 { 
 	int key_count = getKeyCount();
 
-	if (key_count >= max_key_count + 1) // + 1 for one overflow insert
+	if (key_count >= (max_key_count + 1)) // + 1 for one overflow insert
 		return RC_NODE_FULL;
 
 	leaf_entry* key_start = (leaf_entry *) (buffer + sizeof(int));
@@ -79,6 +80,9 @@ RC BTLeafNode::insert(int key, const RecordId& rid)
 	if (i < key_count)
 	{
 		int rest = key_count - i;
+		//if ((key_start+1)->ent_key == 272)
+		//	fprintf(stdout, "272 MOVED. ITS R.PID: %d\n", (key_start+1)->rec_id.pid);
+
 		memmove(key_start+1, key_start, entry_size * rest);
 	}
 
@@ -87,9 +91,6 @@ RC BTLeafNode::insert(int key, const RecordId& rid)
 	new_entry.ent_key = key;
 
 	*key_start = new_entry;
-
-	if (key_start->ent_key == 272)
-		fprintf(stdout, "INSERTED WITH KEY: %d R.PID: %d\n", key_start->ent_key, key_start->rec_id.pid);
 
 	key_count++; // after insert succeed, should increment;
 	memcpy(buffer,&key_count, sizeof(int)); // update
@@ -115,7 +116,7 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 
 	int key_count = getKeyCount();
 
-	int front_half = (key_count + 1) / 2;
+	int front_half = (key_count) / 2;
 	int back_half = key_count / 2;
 
 	//char* key_start = buffer + sizeof(int);
@@ -131,12 +132,14 @@ RC BTLeafNode::insertAndSplit(int key, const RecordId& rid,
 	// copy backhalf into siblings buffer
 	memcpy(sib_key_start, split_point, sizeof(leaf_entry) * back_half);
 	memcpy(&siblingKey, sib_key_start, sizeof(int)); // copy the first key
-	memcpy(sibling.buffer, &back_half, sizeof(int)); // update key_count in sibling buffer
+	
+	/* UPDATE KEY COUNTS */
+	memcpy(sibling.buffer, &back_half, sizeof(int));
 	memcpy(buffer, &front_half, sizeof(int));
 
 	memset(split_point, '\0', sizeof(leaf_entry) * back_half); // clear out the back half of the buffer
 
-	fprintf(stdout, "SIBLING's 1st Key: %d R.PID: %d\n", sib_key_start->ent_key, sib_key_start->rec_id.pid);
+	//fprintf(stdout, "SIBLING's 1st Key: %d R.PID: %d\n", sib_key_start->ent_key, sib_key_start->rec_id.pid);
 
 	return 0; 
 }
@@ -165,15 +168,15 @@ RC BTLeafNode::locate(int searchKey, int& eid)
 		if (key_start->ent_key == searchKey)
 		{
 			eid = i;
-			fprintf(stdout, "searchKey FOUND: %d\n", key_start->ent_key);
-			fprintf(stdout, "ITS R.PID: %d\n", key_start->rec_id.pid);
+			//fprintf(stdout, "searchKey FOUND: %d\n", key_start->ent_key);
+			//fprintf(stdout, "ITS R.PID: %d\n", key_start->rec_id.pid);
 			return 0;
 		}
 
 		if (key_start->ent_key > searchKey)
 		{
 			eid = i;
-			fprintf(stdout, "searchKey NOT FOUND: %d\n", key_start->ent_key);
+			//fprintf(stdout, "searchKey NOT FOUND: %d\n", key_start->ent_key);
 			return RC_NO_SUCH_RECORD;
 		}
 
@@ -182,7 +185,7 @@ RC BTLeafNode::locate(int searchKey, int& eid)
 
 	// if out of loop, iterated all entries & no match found
 	eid = i;
-	fprintf(stdout, "searchKey NOT FOUND: %d\n", key_start->ent_key);
+	fprintf(stdout, "searchKey OUTSIDE NOT FOUND: %d\n", key_start->ent_key);
 	return RC_NO_SUCH_RECORD;
 }
 
@@ -201,7 +204,7 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 
 	if (eid >= key_count)
 	{
-		fprintf(stderr, "NO ENTRY %d\n", eid);
+		//fprintf(stderr, "NO ENTRY %d\n", eid);
 		return RC_NO_SUCH_RECORD;
 	}
 
@@ -211,7 +214,7 @@ RC BTLeafNode::readEntry(int eid, int& key, RecordId& rid)
 	key = read_entry->ent_key;
 	rid = read_entry->rec_id;
 
-	fprintf(stdout, "READ IN ENTRY R.PID: %d\n", rid.pid);
+	//fprintf(stdout, "READ IN ENTRY R.PID: %d\n", rid.pid);
 
 	return 0;
 }
@@ -373,7 +376,7 @@ RC BTNonLeafNode::locateChildPtr(int searchKey, PageId& pid)
 
 	int j = 0;
 
-	if (key_start->ent_key >= searchKey) {
+	if (key_start->ent_key > searchKey) {
 		pid = *firstptr;
 		return 0;
 	}

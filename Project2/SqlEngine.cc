@@ -15,6 +15,7 @@
 #include "Bruinbase.h"
 #include "SqlEngine.h"
 #include "BTreeIndex.h"
+#include <iostream>
 
 #include <climits>
 
@@ -24,7 +25,8 @@ using namespace std;
 extern FILE* sqlin;
 int sqlparse(void);
 
-RC checkAndPrint (SelCond::Comparator comp, int diff, int attr, int& count, int key, string value);
+RC checkConds(SelCond::Comparator comp, int diff, int& count);
+RC printOutput(int attr, int key, string value);
 
 
 RC SqlEngine::run(FILE* commandline)
@@ -53,7 +55,7 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
   int min = 0;
   int max = INT_MAX;
   int eql = -1;
-  int neql = -1;
+  //int neql = -1;
   int needRead = 0;
 
   int newMax = max;
@@ -103,22 +105,29 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
       needRead = 1;
   }
 
-  // open the table file
-  if (needRead) // open table only if we need to read values from it
-    if ((rc = rf.open(table + ".tbl", 'r')) < 0) {
-      fprintf(stderr, "Error: table %s does not exist\n", table.c_str());
-      return rc;
-    }
+  int hasRange = 1;
+  int doIndexSel = 0;
+  if ((min == 0) && (max == INT_MAX) && (eql == -1))
+    hasRange = 0;
+
+  if (hasRange)
+    doIndexSel = 1;
+  else if (!hasRange && !needRead) // count(*) from whole table
+    doIndexSel = 1;
 
   /*  *  *  *  *  *  *  *  *  *  *  *
     REGULAR SEARCH OF INDEX SEARCH
   *  *  *  *  *  *  *  *  *  *  *  */
   BTreeIndex treeIndex;
-  if (((min == 0) && (max == INT_MAX) && (eql == -1)) || // no range/equality
-        ((rc = treeIndex.open(table + ".idx", 'r')) < 0)) // no index file
+  if (!doIndexSel || ((rc = treeIndex.open(table + ".idx", 'r')) < 0)) 
   {
     // IF NO RANGE/EQ OR INDEX FILE DNE = DO REGULAR SELECT
     // scan the table file from the beginning
+    if ((rc = rf.open(table + ".tbl", 'r')) < 0) {
+      fprintf(stderr, "Error: table %s does not exist\n", table.c_str());
+      return rc;
+    }
+
     rid.pid = rid.sid = 0;
     count = 0;
     while (rid < rf.endRid()) {
@@ -188,17 +197,25 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
   // ELSE INDEX FILE EXISTS && RANGE/EQAULITY QUERY = DO INDEX SEARCH
   else
   {
+    // open the table file
+    if (needRead) // open table only if we need to read values from it
+      if ((rc = rf.open(table + ".tbl", 'r')) < 0) {
+        fprintf(stderr, "Error: table %s does not exist\n", table.c_str());
+        return rc;
+      }
+
     count = 0;
 
     treeIndex.readInfo();
+    fprintf(stdout, "READING@readInfo\n");
 
-    fprintf(stderr, "HERE IS THE TREE HEIGHT: %d\n", treeIndex.getHeight());
+    //fprintf(stderr, "HERE IS THE TREE HEIGHT: %d\n", treeIndex.getHeight());
 
     IndexCursor cursor;
 
-    if (eql != -1) 
+    if (eql != -1) // EQUAL QUERY
     {
-      if (min > eql || max < eql)
+      if (min > eql || max < eql) // bad conditions
         goto no_match;
 
       if ((rc = treeIndex.locate(eql, cursor)) < 0) {
@@ -206,42 +223,135 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
         goto exit_select;
       }
 
-      if (needRead) {
-        treeIndex.readLeafEntry(cursor.eid, key, rid, cursor);
-        fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d R.PID: %d\n", cursor.eid, cursor.pid, rid.pid);
+      if (needRead) { // Need to read from table
+        //treeIndex.readLeafEntry(cursor.eid, key, rid, cursor);
+        //fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d R.PID: %d\n", cursor.eid, cursor.pid, rid.pid);
 
-        rc = rf.read(rid, key, value);
+        BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
+        cacheLeaf.readEntry(cursor.eid, key, rid);
 
+        if (rc = rf.read(rid, key, value) < 0)
+          goto exit_select;
+        fprintf(stdout, "READING@rf.read\n");
 
-        fprintf(stdout, "%s\n", value.c_str());
-      }
-      else {
-        count++;
-        fprintf(stdout, "%d\n", eql);
-      }
-
-      /*
-      for (unsigned i = 0; i < cond.size(); i++) 
-      {
-        if (cond[i].attr == 2)
+        for (unsigned i = 0; i < cond.size(); i++) 
         {
-          treeIndex.readLeafEntry(cursor.eid, key, rid, cursor);
-          fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d RID: %d\n", cursor.eid, cursor.pid, rid.pid);
+          if (cond[i].attr == 2)
+          {
+            diff = strcmp(value.c_str(), cond[i].value);
 
-          if ((rc = rf.read(rid, key, value)) < 0) {
-            fprintf(stderr, "Error: while reading a tuple from table %s\n", table.c_str());
+            if (checkConds(cond[i].comp, diff, count) < 0)
+            {
+              goto no_match;
+            }
+          }
+        }
+
+        count++;
+        printOutput(attr, key, value);
+      }
+      else // no need to read from table
+        count++;
+
+    }
+    else //if (min != 0 || max != INT_MAX) // RANGE QUERY
+    {
+      if (min > max) // bad condition
+        goto no_match;
+
+      if ((rc = treeIndex.locate(min, cursor)) < 0) {
+        goto exit_select;
+      }
+
+      int curr = min;
+
+      while (curr <= max) 
+      {
+        BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
+
+        if (needRead) {
+          cacheLeaf.readEntry(cursor.eid, key, rid);
+
+          if (rc = rf.read(rid, key, value) < 0)
             goto exit_select;
+
+          int meetsConds = 1;
+          for (unsigned i = 0; i < cond.size(); i++)
+          {
+            switch (cond[i].attr) {
+              case 1:
+                diff = key - atoi(cond[i].value);
+                break;
+              case 2:
+                diff = strcmp(value.c_str(), cond[i].value);
+                break;
+            }
+
+            if (checkConds(cond[i].comp, diff, count) < 0) {
+                meetsConds = 0;
+                break;
+            }
           }
 
-          diff = strcmp(value.c_str(), cond[i].value);
+          if (meetsConds)
+          {
+            count++;
+            printOutput(attr, key, value);
+          }
 
-          if (checkAndPrint(cond[i].comp, diff, attr, count, key, value) < 0)
-            fprintf(stderr, "HERE IS THE ERROR in C&P");
+
+          if (treeIndex.readForward(cursor, key, rid) < 0 && curr != max)
+          {
+            cursor.pid = cacheLeaf.getNextNodePtr();
+            if (cursor.pid < 0)
+              goto no_match;
+            cursor.eid = 0;
+          }
+
+          curr++;
         }
-      }
-      */
-    }
-  }
+        else { // no need to read from table
+
+          cacheLeaf.readEntry(cursor.eid, key, rid);
+
+          int meetsConds = 1;
+          // no cond[i].attr == 2 since !needRead
+          for (unsigned i = 0; i < cond.size(); i++)
+          {
+
+            diff = key - atoi(cond[i].value);
+
+            if (checkConds(cond[i].comp, diff, count) < 0) {
+              meetsConds = 0;
+              break;
+            }
+          }
+
+          if (meetsConds)
+          {
+            count++;
+            printOutput(attr, key, value);
+          }
+          if (treeIndex.readForward(cursor, key, rid) < 0 && curr != max)
+          {
+            cursor.pid = cacheLeaf.getNextNodePtr();
+            if (cursor.pid < 0)
+              goto no_match;
+            cursor.eid = 0;
+          }
+
+          curr++;
+
+        }
+
+
+      } // end of while curr <= max
+
+
+    } // end of range query index search
+
+
+  } /* END OF INDEX SEARCH IMPL */
 
 
   // print matching tuple count if "select count(*)"
@@ -367,31 +477,34 @@ RC SqlEngine::parseLoadLine(const string& line, int& key, string& value)
 
 
 
-RC checkAndPrint (SelCond::Comparator comp, int diff, int attr, int& count, int key, string value) {
-  
+RC checkConds (SelCond::Comparator comp, int diff, int& count) 
+{  
   switch (comp) {
         case SelCond::EQ:
-          if (diff != 0)
-            return -1;
+          if (diff != 0) return -1;
+          break;
         case SelCond::NE:
-          if (diff == 0)
-            return -1;
+          if (diff == 0) return -1;
+          break;
         case SelCond::GT:
-          if (diff <= 0)
-            return -1;
+          if (diff <= 0) return -1;
+          break;
         case SelCond::LT:
-          if (diff >= 0)
-            return -1;
+          if (diff >= 0) return -1;
+          break;
         case SelCond::GE:
-          if (diff < 0)
-            return -1;
+          if (diff < 0) return -1;
+          break;
         case SelCond::LE:
-          if (diff > 0) 
-            return -1;
+          if (diff > 0) return -1;
+          break;
     }
 
-  count++;
+  //count++;
+  return 0;
+}
 
+RC printOutput (int attr, int key, string value) {
       // print the tuple 
   switch (attr) {
       case 1:  // SELECT key

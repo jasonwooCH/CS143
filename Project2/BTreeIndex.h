@@ -13,6 +13,7 @@
 #include "Bruinbase.h"
 #include "PageFile.h"
 #include "RecordFile.h"
+#include "BTreeNode.h"
              
 /**
  * The data structure to point to a particular entry at a b+tree leaf node.
@@ -100,6 +101,10 @@ class BTreeIndex {
   RC getHeight() {
     return treeHeight;
   }
+
+  BTLeafNode getCacheLeaf() {
+    return cacheLeaf;
+  }
   
  private:
   PageFile pf;         /// the PageFile used to store the actual b+tree in disk
@@ -110,6 +115,7 @@ class BTreeIndex {
   /// this class is destructed. Make sure to store the values of the two 
   /// variables in disk, so that they can be reconstructed when the index
   /// is opened again later.
+  BTLeafNode cacheLeaf;
 
   char buffer[PageFile::PAGE_SIZE];
 };
