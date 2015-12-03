@@ -207,7 +207,7 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
     count = 0;
 
     treeIndex.readInfo();
-    fprintf(stdout, "READING@readInfo\n");
+    //fprintf(stdout, "READING@readInfo\n");
 
     //fprintf(stderr, "HERE IS THE TREE HEIGHT: %d\n", treeIndex.getHeight());
 
@@ -228,11 +228,12 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
         //fprintf(stdout, "LOCATING CURSOR EID: %d, PID: %d R.PID: %d\n", cursor.eid, cursor.pid, rid.pid);
 
         BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
-        cacheLeaf.readEntry(cursor.eid, key, rid);
+        if (cacheLeaf.readEntry(cursor.eid, key, rid) < 0)
+          goto no_match;
 
-        if (rc = rf.read(rid, key, value) < 0)
+        if ((rc = rf.read(rid, key, value)) < 0)
           goto exit_select;
-        fprintf(stdout, "READING@rf.read\n");
+        //fprintf(stdout, "READING@rf.read\n");
 
         for (unsigned i = 0; i < cond.size(); i++) 
         {
@@ -251,7 +252,12 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
         printOutput(attr, key, value);
       }
       else // no need to read from table
+      {
+        BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
+        if (cacheLeaf.readEntry(cursor.eid, key, rid) < 0)
+          goto no_match;
         count++;
+      }
 
     }
     else //if (min != 0 || max != INT_MAX) // RANGE QUERY
@@ -265,15 +271,28 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
 
       int curr = min;
 
-      while (curr <= max) 
+      while (curr < max) 
       {
-        BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
+        //BTLeafNode cacheLeaf = treeIndex.getCacheLeaf();
 
         if (needRead) {
-          cacheLeaf.readEntry(cursor.eid, key, rid);
+          BTLeafNode nextLeaf = treeIndex.getCacheLeaf();
+          if (curr != min) {
+            nextLeaf.read(cursor.pid, treeIndex.getPf());
+            treeIndex.updateCacheLeaf(nextLeaf);
+          }
+          treeIndex.readForward(cursor, key, rid);
 
-          if (rc = rf.read(rid, key, value) < 0)
+          curr = key;
+
+          //fprintf(stdout, "Key: %d, R.pid: %d, R.eid: %d\n", key, rid.pid, rid.sid);
+          //fprintf(stderr, "We are at pid: %d, eid: %d\n", cursor.pid, cursor.eid);
+
+          if ((rc = rf.read(rid, key, value)) < 0) {
+            fprintf(stdout, "error with r.pid: %d, r.eid: %d, key: %d\n", rid.pid, rid.sid, key);
+            fprintf(stderr, "We are at pid: %d, eid: %d\n", cursor.pid, cursor.eid);
             goto exit_select;
+          }
 
           int meetsConds = 1;
           for (unsigned i = 0; i < cond.size(); i++)
@@ -299,7 +318,16 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
             printOutput(attr, key, value);
           }
 
+          if (cursor.eid >= nextLeaf.getKeyCount()) {
+            cursor.pid = nextLeaf.getNextNodePtr();
+            //cout << "NEW NODE PID: " << cursor.pid << endl;
+            if (cursor.pid == 0) // the last child node
+              goto no_match;
+            //cout << "THIS IS NEXT PTR" << cursor.pid << endl;
+            cursor.eid = 0;
+          }
 
+          /*
           if (treeIndex.readForward(cursor, key, rid) < 0 && curr != max)
           {
             cursor.pid = cacheLeaf.getNextNodePtr();
@@ -307,12 +335,20 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
               goto no_match;
             cursor.eid = 0;
           }
+          */
 
-          curr++;
         }
         else { // no need to read from table
 
-          cacheLeaf.readEntry(cursor.eid, key, rid);
+          BTLeafNode nextLeaf = treeIndex.getCacheLeaf();
+          if (curr != min) {
+            nextLeaf.read(cursor.pid, treeIndex.getPf());
+            treeIndex.updateCacheLeaf(nextLeaf);
+          }
+          treeIndex.readForward(cursor, key, rid);
+          //cout << "THIS IS THE NEW KEY" << key << endl;
+
+          curr = key;
 
           int meetsConds = 1;
           // no cond[i].attr == 2 since !needRead
@@ -332,6 +368,8 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
             count++;
             printOutput(attr, key, value);
           }
+
+          /*
           if (treeIndex.readForward(cursor, key, rid) < 0 && curr != max)
           {
             cursor.pid = cacheLeaf.getNextNodePtr();
@@ -339,8 +377,15 @@ RC SqlEngine::select(int attr, const string& table, const vector<SelCond>& cond)
               goto no_match;
             cursor.eid = 0;
           }
+          */
 
-          curr++;
+          if (cursor.eid >= nextLeaf.getKeyCount()) {
+            cursor.pid = nextLeaf.getNextNodePtr();
+            if (cursor.pid == 0) // the last child node
+              goto no_match;
+            //cout << "THIS IS NEXT PTR" << cursor.pid << endl;
+            cursor.eid = 0;
+          }
 
         }
 
@@ -427,7 +472,7 @@ RC SqlEngine::load(const string& table, const string& loadfile, bool index)
 
   }
 
-  fprintf(stdout, "FINAL TREE HEIGHT: %d\n", treeIndex.getHeight());
+  //fprintf(stdout, "FINAL TREE HEIGHT: %d\n", treeIndex.getHeight());
 
   loaded_file.close();
 

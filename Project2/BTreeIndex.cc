@@ -12,6 +12,7 @@
 
 using namespace std;
 
+
 /*
  * BTreeIndex constructor
  */
@@ -86,16 +87,16 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
         else 
         {
             BTLeafNode sibling;
+            PageId prevNext = newleaf.getNextNodePtr();
             if (newleaf.insertAndSplit(key, rid, sibling, midKey) < 0)
                 fprintf(stdout, "leaf split error %d\n", pid);
 
             PageId sibPid = pf.endPid();
+            sibling.setNextNodePtr(prevNext);
             sibling.write(sibPid, pf);
 
             newleaf.setNextNodePtr(sibPid);
             newleaf.write(pid, pf);
-
-            //fprintf(stdout, "Leaf splitting at pid: %d with sib: %d\n", pid, sibPid);
 
             leftChild = pid;
             rightChild = sibPid;
@@ -125,7 +126,6 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             if (newNonleaf.insert(midKey, rightChild) < 0)
                 fprintf(stdout, "Nonleaf insert error %d\n", pid);
 
-            //fprintf(stdout, "INSERTING TO ROOT NODE a NEW KEY: %d\n", midKey);
             newNonleaf.write(pid, pf);
             midKey = 0;
         } 
@@ -136,8 +136,6 @@ RC BTreeIndex::recInsert(int key, const RecordId& rid, PageId pid, int& midKey,
             
             if (newNonleaf.insertAndSplit(key, rightChild, sib, midKey) < 0)
                 fprintf(stdout, "nonleaf split error %d\n", midKey);
-
-            fprintf(stdout, "THIS SHOULDNT BE CALLED WITH MOVIE TABLE %d\n", sibPid);
 
             sib.write(sibPid, pf);
             newNonleaf.write(pid, pf);
@@ -160,14 +158,11 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
 {
 	if (rootPid < 1) {
         rootPid = 1;
-		//rootPid = pf.endPid();
-        fprintf(stdout, "INITIAL ROOT PID %d\n", rootPid);
+
         BTLeafNode newRoot;
         
         if (newRoot.insert(key, rid) < 0)
             fprintf(stderr, "root error %d\n", rootPid);
-        
-        fprintf(stdout, "FIRST ADDED KEY: %d R.PID: %d\n", key, rid.pid);
         
         newRoot.write(1, pf);
         treeHeight = 0;
@@ -191,8 +186,6 @@ RC BTreeIndex::insert(int key, const RecordId& rid)
                 fprintf(stderr, "initialize Root error %d\n", midKey);
             newNonRoot.write(rootPid, pf);
             treeHeight++;
-            fprintf(stdout, "INCREMENTED TREE HEIGHT TO: %d, ROOT: %d\n", treeHeight, rootPid);
-            fprintf(stdout, "LEFT CHILD: %d, RIGHT CHILD: %d\n", leftChild, rightChild);
         }
 
         //treeHeight++;
@@ -272,12 +265,10 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
         {
 			return RC_FILE_READ_FAILED;
         }
-        fprintf(stdout, "READING@TI.locate Nonleaf\n");
 
 		RC childPtr = nonLeaf.locateChildPtr(searchKey, cursor.pid);
 		if (childPtr < 0)
         {
-            fprintf(stderr, "HERE IS THE 1HEIGHT %d and PID %d and KEY %d \n", treeHeight, cursor.pid, searchKey);
 			return childPtr;
         }
 
@@ -288,10 +279,8 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
 
 	if (cacheLeaf.read(cursor.pid, pf) < 0)
     {
-        fprintf(stderr, "HERE IS THE 2HEIGHT %d and PID %d and KEY %d \n", treeHeight, cursor.pid, searchKey);
 		return RC_FILE_READ_FAILED;
     }
-    fprintf(stdout, "READING@TI.locate Leaf\n");
 
 
 	cacheLeaf.locate(searchKey, cursor.eid);
@@ -300,18 +289,15 @@ RC BTreeIndex::locate(int searchKey, IndexCursor& cursor)
     return 0;
 }
 
-//RC BTreeIndex::getCacheLeaf();
 
 RC BTreeIndex::readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& cursor)
 {
     BTLeafNode leafNode;
     if (leafNode.read(cursor.pid, pf) < 0)
       return RC_FILE_READ_FAILED;
-    fprintf(stdout, "READING@TI.rLE\n");
 
 
     leafNode.readEntry(cursor.eid, key, rid);
-    //fprintf(stdout, "R.PID @ readLeafEntry: %d\n", rid.pid);
 
     return 0;
 }
@@ -326,12 +312,6 @@ RC BTreeIndex::readLeafEntry(int eid, int& key, RecordId& rid, IndexCursor& curs
  */
 RC BTreeIndex::readForward(IndexCursor& cursor, int& key, RecordId& rid)
 {
-	//BTLeafNode readNode;
-
-	//if (cacheLeaf.read(cursor.pid, pf) < 0)
-	//	return RC_FILE_READ_FAILED;
-    if (cursor.eid >= cacheLeaf.getKeyCount())
-        return RC_NO_SUCH_RECORD;
 
 	if (cacheLeaf.readEntry(cursor.eid, key, rid) < 0)
 		return RC_NO_SUCH_RECORD;
